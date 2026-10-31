@@ -5,3 +5,4 @@ frames/
 *.webm
 *.mov
 .env
+.endpoint-id
