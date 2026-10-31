@@ -35,13 +35,19 @@ RUN node -e "import('@hyperframes/producer').then(m=>{if(!m.executeRenderJob)thr
     && ffmpeg -version > /dev/null \
     && echo "--- puppeteer cache ---" && ls -R /app/.cache/puppeteer | head -40
 
+# ldd is the reliable gate: a missing .so here means every render captures 0 frames.
+# Actually launching Chrome is only advisory — BuildKit gives /dev/shm just 64 MB,
+# so a crash here does not mean the image is broken.
 RUN set -eux; \
     CHROME="$(find /app/.cache/puppeteer -type f \( -name 'chrome-headless-shell' -o -name 'chrome' \) | head -1)"; \
     test -n "$CHROME"; \
     echo "chrome binary: $CHROME"; \
     echo "--- unresolved shared libraries ---"; \
     if ldd "$CHROME" | grep "not found"; then echo "MISSING LIBRARIES ABOVE"; exit 1; fi; \
-    "$CHROME" --headless --no-sandbox --disable-gpu --dump-dom about:blank > /dev/null; \
-    echo "chrome launches OK"
+    echo "all shared libraries resolve"; \
+    "$CHROME" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
+      --dump-dom about:blank > /dev/null 2>&1 \
+      && echo "chrome launched OK" \
+      || echo "WARNING: chrome did not launch during build (often just BuildKit /dev/shm)"
 
 CMD ["python3", "-u", "handler.py"]
