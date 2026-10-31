@@ -25,7 +25,8 @@ WORKDIR /app
 ENV PUPPETEER_CACHE_DIR=/app/.cache/puppeteer
 
 COPY package.json ./
-RUN npm install --omit=dev --no-audit --no-fund
+# Clean the cache in the SAME layer — deleting it later would not shrink the image.
+RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
 
 # Do not rely on puppeteer's postinstall having run: a transitive install can skip it,
 # leaving no browser on disk and every render capturing 0 frames. Call puppeteer's own
@@ -35,16 +36,15 @@ RUN npm install --omit=dev --no-audit --no-fund
 # puppeteer's install.mjs swallows its own failures ("Browser download failed" then
 # exit 0), so the build can succeed with empty browser folders. Capture every attempt
 # into the image: build logs are awkward to reach, but `diagnose` can read a file.
+# install.mjs alone downloads exactly the build this puppeteer expects. The earlier
+# `@stable` calls fetched a SECOND version of each browser — about 350 MB of waste that
+# turned a fresh worker's cold start into five minutes. It needs `unzip`, installed above.
 RUN { \
       echo "== install.mjs =="; \
       node node_modules/puppeteer/install.mjs 2>&1; echo "exit=$?"; \
-      echo "== puppeteer cli: chrome-headless-shell =="; \
-      node node_modules/puppeteer/lib/puppeteer/node/cli.js browsers install chrome-headless-shell 2>&1; echo "exit=$?"; \
-      echo "== @puppeteer/browsers direct =="; \
-      node node_modules/@puppeteer/browsers/lib/main-cli.js install chrome-headless-shell@stable --path /app/.cache/puppeteer 2>&1; echo "exit=$?"; \
-      node node_modules/@puppeteer/browsers/lib/main-cli.js install chrome@stable --path /app/.cache/puppeteer 2>&1; echo "exit=$?"; \
       echo "== resulting tree =="; \
-      find /app/.cache/puppeteer -maxdepth 5 2>&1 | head -40; \
+      find /app/.cache/puppeteer -maxdepth 3 2>&1 | head -20; \
+      echo "== size =="; du -sh /app/.cache/puppeteer 2>&1; \
     } > /app/install-log.txt 2>&1; \
     cat /app/install-log.txt; \
     exit 0
