@@ -53,10 +53,58 @@ def _resolve_project(job_input):
     return project_dir, work_dir
 
 
+def _diagnose():
+    """Report what is actually inside the image. Build logs are hard to reach; a job
+    result is not, so this is how the image gets inspected."""
+    import glob
+
+    cache = os.environ.get("PUPPETEER_CACHE_DIR", "/app/.cache/puppeteer")
+    binaries = [
+        p
+        for p in glob.glob(os.path.join(cache, "**", "*"), recursive=True)
+        if os.path.isfile(p) and os.path.basename(p) in ("chrome", "chrome-headless-shell")
+    ]
+
+    def run(cmd):
+        try:
+            p = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            return ((p.stdout or "") + (p.stderr or "")).strip()[:900]
+        except Exception as exc:
+            return f"{type(exc).__name__}: {exc}"
+
+    info = {
+        "ok": True,
+        "cacheDir": cache,
+        "cacheExists": os.path.isdir(cache),
+        "cacheEntries": sorted(os.listdir(cache))[:20] if os.path.isdir(cache) else [],
+        "chromeBinaries": binaries[:5],
+        "cpuCount": os.cpu_count(),
+        "node": run(["node", "--version"]),
+        "ffmpeg": run(["ffmpeg", "-version"]).split("\n")[0],
+        "projects": sorted(os.listdir(PROJECTS_DIR)) if os.path.isdir(PROJECTS_DIR) else [],
+    }
+
+    if binaries:
+        chrome = binaries[0]
+        info["lddMissing"] = [l for l in run(["ldd", chrome]).splitlines() if "not found" in l]
+        info["chromeVersion"] = run([chrome, "--version"])
+        info["chromeLaunch"] = run(
+            [chrome, "--headless", "--no-sandbox", "--disable-gpu",
+             "--disable-dev-shm-usage", "--dump-dom", "about:blank"]
+        )[:300]
+    return info
+
+
 def handler(job):
     started = time.time()
     job_input = job.get("input") or {}
     work_dir = None
+
+    if job_input.get("diagnose"):
+        try:
+            return _diagnose()
+        except Exception as exc:
+            return {"ok": False, "error": f"diagnose failed: {type(exc).__name__}: {exc}"}
 
     try:
         project_dir, work_dir = _resolve_project(job_input)
