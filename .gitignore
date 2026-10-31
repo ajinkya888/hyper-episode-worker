@@ -1,0 +1,7 @@
+node_modules/
+renders/
+frames/
+*.mp4
+*.webm
+*.mov
+.env

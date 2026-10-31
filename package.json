@@ -1,0 +1,17 @@
+{
+  "name": "hyper-episode-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Renders one episode with HyperFrames inside a RunPod serverless worker.",
+  "scripts": {
+    "render": "node render.mjs"
+  },
+  "dependencies": {
+    "@hyperframes/lint": "0.8.200",
+    "@hyperframes/producer": "0.8.200"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
