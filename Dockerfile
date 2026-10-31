@@ -26,6 +26,13 @@ ENV PUPPETEER_CACHE_DIR=/app/.cache/puppeteer
 COPY package.json ./
 RUN npm install --omit=dev --no-audit --no-fund
 
+# Do not rely on puppeteer's postinstall having run: a transitive install can skip it,
+# which leaves no browser on disk and every render capturing 0 frames. Install both
+# browsers explicitly — HyperFrames resolves the headless shell, but some paths
+# (audio FX, HDR) launch full Chrome.
+RUN npx --yes puppeteer browsers install chrome-headless-shell \
+    && npx --yes puppeteer browsers install chrome
+
 COPY render.mjs handler.py ./
 COPY projects ./projects
 
@@ -33,7 +40,7 @@ COPY projects ./projects
 # matter most: a missing shared library otherwise shows up only as "0 frames captured".
 RUN node -e "import('@hyperframes/producer').then(m=>{if(!m.executeRenderJob)throw new Error('producer missing executeRenderJob')})" \
     && ffmpeg -version > /dev/null \
-    && echo "--- puppeteer cache ---" && ls -R /app/.cache/puppeteer | head -40
+    && echo "--- puppeteer cache ---" && ls -R /app/.cache/puppeteer | head -60
 
 # ldd is the reliable gate: a missing .so here means every render captures 0 frames.
 # Actually launching Chrome is only advisory — BuildKit gives /dev/shm just 64 MB,
