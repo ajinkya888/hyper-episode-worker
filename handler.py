@@ -204,6 +204,28 @@ def handler(job):
             "podId": os.environ.get("RUNPOD_POD_ID"),
         }
 
+        # Upload by default: a finished video is useless if it dies with the worker.
+        if job_input.get("upload", True) and os.environ.get("R2_ACCOUNT_ID"):
+            episode = job_input.get("episodeId") or f"{int(started)}-{os.urandom(3).hex()}"
+            uproc = subprocess.run(
+                ["node", os.path.join(APP_DIR, "upload.mjs"), json.dumps({
+                    "filePath": output_path,
+                    "key": f"episodes/{episode}/video.{fmt}",
+                    "contentType": {"mp4": "video/mp4", "webm": "video/webm", "mov": "video/quicktime"}.get(fmt, "application/octet-stream"),
+                    "expiresIn": job_input.get("linkExpiresIn", 604800),
+                })],
+                capture_output=True, text=True, timeout=900,
+            )
+            upload = None
+            for line in (uproc.stdout or "").splitlines():
+                if line.startswith("RESULT:"):
+                    upload = json.loads(line[len("RESULT:"):])
+            result["upload"] = upload or {
+                "ok": False,
+                "error": "upload produced no result",
+                "log": ((uproc.stderr or "") + (uproc.stdout or ""))[-600:],
+            }
+
         if job_input.get("returnVideo"):
             size = result.get("bytes", 0)
             if size <= MAX_INLINE_BYTES:

@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@hyperframes/lint": "0.8.200",
-    "@hyperframes/producer": "0.8.200"
+    "@hyperframes/producer": "0.8.200",
+    "aws4fetch": "1.0.20"
   },
   "engines": {
     "node": ">=22"
