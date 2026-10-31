@@ -31,12 +31,22 @@ RUN npm install --omit=dev --no-audit --no-fund
 # installer by path — `npx puppeteer` has to resolve a package name and fails here.
 # Every line is non-fatal: a build that dies hides its own diagnostics, and the
 # `diagnose` job input reports what actually landed.
-RUN set -x; \
-    node node_modules/puppeteer/install.mjs || echo "install.mjs failed"; \
-    node node_modules/puppeteer/lib/puppeteer/node/cli.js browsers install chrome-headless-shell || echo "cli shell install failed"; \
-    node node_modules/puppeteer/lib/puppeteer/node/cli.js browsers install chrome || echo "cli chrome install failed"; \
-    echo "--- puppeteer cache after install ---"; \
-    ls -R /app/.cache/puppeteer 2>/dev/null | head -60 || echo "(cache missing or empty)"
+# puppeteer's install.mjs swallows its own failures ("Browser download failed" then
+# exit 0), so the build can succeed with empty browser folders. Capture every attempt
+# into the image: build logs are awkward to reach, but `diagnose` can read a file.
+RUN { \
+      echo "== install.mjs =="; \
+      node node_modules/puppeteer/install.mjs 2>&1; echo "exit=$?"; \
+      echo "== puppeteer cli: chrome-headless-shell =="; \
+      node node_modules/puppeteer/lib/puppeteer/node/cli.js browsers install chrome-headless-shell 2>&1; echo "exit=$?"; \
+      echo "== @puppeteer/browsers direct =="; \
+      node node_modules/@puppeteer/browsers/lib/main-cli.js install chrome-headless-shell@stable --path /app/.cache/puppeteer 2>&1; echo "exit=$?"; \
+      node node_modules/@puppeteer/browsers/lib/main-cli.js install chrome@stable --path /app/.cache/puppeteer 2>&1; echo "exit=$?"; \
+      echo "== resulting tree =="; \
+      find /app/.cache/puppeteer -maxdepth 5 2>&1 | head -40; \
+    } > /app/install-log.txt 2>&1; \
+    cat /app/install-log.txt; \
+    exit 0
 
 COPY render.mjs handler.py ./
 COPY projects ./projects

@@ -84,6 +84,13 @@ def _diagnose():
         "projects": sorted(os.listdir(PROJECTS_DIR)) if os.path.isdir(PROJECTS_DIR) else [],
     }
 
+    # What the browser install actually printed while the image was built.
+    try:
+        with open("/app/install-log.txt", encoding="utf-8", errors="replace") as fh:
+            info["installLog"] = fh.read()[-3000:]
+    except Exception as exc:
+        info["installLog"] = f"unavailable: {exc}"
+
     if binaries:
         chrome = binaries[0]
         info["lddMissing"] = [l for l in run(["ldd", chrome]).splitlines() if "not found" in l]
