@@ -115,12 +115,49 @@ def handler(job):
 
     try:
         project_dir, work_dir = _resolve_project(job_input)
+        copied_project = work_dir is not None
         out_dir = work_dir or tempfile.mkdtemp(prefix="render-")
         if work_dir is None:
             work_dir = out_dir
 
         fmt = job_input.get("format", "mp4")
         output_path = os.path.join(out_dir, f"out.{fmt}")
+
+        # Voice first: the real word timings decide how long the scene is and when
+        # every caption lands, so it has to run before the render.
+        voice_result = None
+        voice = job_input.get("voice")
+        if voice:
+            if not copied_project:
+                # _resolve_project returned the bundled directory; never write into it.
+                work_dir = tempfile.mkdtemp(prefix="episode-")
+                copied = os.path.join(work_dir, "project")
+                shutil.copytree(project_dir, copied)
+                project_dir = copied
+                out_dir = work_dir
+                output_path = os.path.join(out_dir, f"out.{fmt}")
+
+            vproc = subprocess.run(
+                ["node", os.path.join(APP_DIR, "voice.mjs"), json.dumps({
+                    "projectDir": project_dir,
+                    "text": voice.get("text", ""),
+                    "voiceId": voice.get("voiceId", "JBFqnCBsd6RMkjVDRZzb"),
+                    "modelId": voice.get("modelId", "eleven_turbo_v2_5"),
+                    "tailSeconds": voice.get("tailSeconds", 1.5),
+                })],
+                capture_output=True, text=True, timeout=300,
+            )
+            for line in (vproc.stdout or "").splitlines():
+                if line.startswith("RESULT:"):
+                    voice_result = json.loads(line[len("RESULT:"):])
+            if voice_result is None or not voice_result.get("ok"):
+                return {
+                    "ok": False,
+                    "stage": "voice",
+                    "voice": voice_result,
+                    "log": ((vproc.stderr or "") + (vproc.stdout or ""))[-1200:],
+                }
+            job_input.setdefault("durationSeconds", voice_result["durationSeconds"])
 
         options = {
             "projectDir": project_dir,
@@ -159,6 +196,8 @@ def handler(job):
             return result
 
         result["totalSeconds"] = round(time.time() - started, 2)
+        if voice_result:
+            result["voice"] = voice_result
         result["worker"] = {
             "cpuCount": os.cpu_count(),
             "endpointId": os.environ.get("RUNPOD_ENDPOINT_ID"),

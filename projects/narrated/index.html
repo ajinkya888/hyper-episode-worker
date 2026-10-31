@@ -1,0 +1,281 @@
+<!doctype html>
+<html
+  lang="en"
+  data-composition-variables='[
+    {"id":"headline","type":"string","label":"Headline","default":"What one video actually costs"},
+    {"id":"accent","type":"color","label":"Accent","default":"#4ade80"},
+    {"id":"ink","type":"color","label":"Ink","default":"#f8fafc"},
+    {"id":"channel","type":"string","label":"Channel name","default":"COST DESK"}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Narrated scene</title>
+    <script src="assets/gsap-3.14.2.min.js"></script>
+    <script src="voice-words.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+      }
+      #stage {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(120% 90% at 18% 8%, #1e293b 0%, #0b1120 55%, #070c17 100%);
+        font-family: Inter, sans-serif;
+        color: var(--ink);
+      }
+      #grid {
+        position: absolute;
+        inset: 0;
+        opacity: 0.5;
+      }
+      #eyebrow {
+        position: absolute;
+        left: 150px;
+        top: 150px;
+        font-family: "Space Mono", monospace;
+        font-size: 26px;
+        letter-spacing: 0.42em;
+        color: var(--accent);
+      }
+      #headline {
+        position: absolute;
+        left: 150px;
+        top: 212px;
+        width: 1100px;
+        font-family: "Archivo Black", sans-serif;
+        font-size: 104px;
+        line-height: 1.02;
+        letter-spacing: -0.02em;
+      }
+      #chart {
+        position: absolute;
+        left: 150px;
+        top: 470px;
+      }
+      #total-wrap {
+        position: absolute;
+        right: 120px;
+        top: 300px;
+        width: 720px;
+        text-align: right;
+      }
+      #total {
+        font-family: "Archivo Black", sans-serif;
+        font-size: 168px;
+        line-height: 0.9;
+        color: var(--accent);
+        font-variant-numeric: tabular-nums;
+      }
+      #total-label {
+        font-family: "Space Mono", monospace;
+        font-size: 24px;
+        letter-spacing: 0.22em;
+        opacity: 0.65;
+        margin-top: 18px;
+      }
+      #caption {
+        position: absolute;
+        left: 160px;
+        right: 160px;
+        bottom: 90px;
+        text-align: center;
+        font-size: 48px;
+        font-weight: 700;
+        line-height: 1.25;
+        letter-spacing: -0.01em;
+        text-shadow: 0 4px 24px rgba(0, 0, 0, 0.55);
+      }
+      #caption span {
+        opacity: 0.22;
+        margin: 0 0.16em;
+        display: inline-block;
+      }
+      .bar-label {
+        font-family: "Space Mono", monospace;
+        font-size: 22px;
+        fill: #94a3b8;
+        letter-spacing: 0.08em;
+      }
+      .bar-value {
+        font-family: "Archivo Black", sans-serif;
+        font-size: 30px;
+        fill: var(--ink);
+        opacity: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="__DURATION__"
+      data-width="1920"
+      data-height="1080"
+    >
+      <div id="stage">
+        <svg id="grid" width="1920" height="1080" aria-hidden="true">
+          <defs>
+            <pattern id="grid-cell" width="120" height="120" patternUnits="userSpaceOnUse">
+              <path d="M120 0H0V120" fill="none" stroke="#1e3a5f" stroke-width="1" />
+            </pattern>
+          </defs>
+          <rect id="grid-fill" width="1920" height="1080" fill="url(#grid-cell)" opacity="0" />
+        </svg>
+
+        <div id="eyebrow" data-var-text="channel">COST DESK</div>
+        <h1 id="headline" data-var-text="headline">What one video actually costs</h1>
+
+        <svg id="chart" width="1160" height="420" aria-hidden="true">
+          <line id="axis" x1="0" y1="330" x2="0" y2="330" stroke="#334155" stroke-width="2" />
+        </svg>
+
+        <div id="total-wrap">
+          <div id="total">$0.00</div>
+          <div id="total-label">PER 10-MIN VIDEO</div>
+        </div>
+
+        <div id="caption" aria-hidden="true"></div>
+      </div>
+
+      <audio id="vo" class="clip" src="voice.mp3" data-start="0" data-volume="1"></audio>
+    </div>
+
+    <script>
+      const BARS = [
+        { label: "SCRIPT + PLAN", value: 0.1 },
+        { label: "IMAGES", value: 0.15 },
+        { label: "VOICE", value: 0.4 },
+        { label: "RENDER", value: 0.13 },
+      ];
+      const TOTAL = BARS.reduce((sum, bar) => sum + bar.value, 0);
+
+      // Real ElevenLabs timings, written next to this file by the worker.
+      const WORDS = window.__VOICE_WORDS || [];
+      const DURATION = window.__VOICE_DURATION || 10;
+
+      const vars =
+        (window.__hyperframes && window.__hyperframes.getVariables
+          ? window.__hyperframes.getVariables()
+          : null) || {};
+      const accent = vars.accent || "#4ade80";
+      document.documentElement.style.setProperty("--accent", accent);
+      document.documentElement.style.setProperty("--ink", vars.ink || "#f8fafc");
+
+      const svg = document.getElementById("chart");
+      const SVG_NS = "http://www.w3.org/2000/svg";
+      const BASE_Y = 330;
+      const MAX_H = 250;
+      const BAR_W = 150;
+      const GAP = 110;
+      const PAD_X = 90;
+      const maxValue = Math.max(...BARS.map((b) => b.value));
+
+      BARS.forEach((bar, i) => {
+        const x = PAD_X + i * (BAR_W + GAP);
+        const fullHeight = (bar.value / maxValue) * MAX_H;
+
+        const rect = document.createElementNS(SVG_NS, "rect");
+        rect.setAttribute("id", "bar-" + i);
+        rect.setAttribute("x", String(x));
+        rect.setAttribute("y", String(BASE_Y));
+        rect.setAttribute("width", String(BAR_W));
+        rect.setAttribute("height", "0");
+        rect.setAttribute("rx", "6");
+        rect.setAttribute("fill", bar.label === "VOICE" ? accent : "#38506e");
+        rect.dataset.fullHeight = String(fullHeight);
+        svg.appendChild(rect);
+
+        const value = document.createElementNS(SVG_NS, "text");
+        value.setAttribute("id", "value-" + i);
+        value.setAttribute("class", "bar-value");
+        value.setAttribute("x", String(x + BAR_W / 2));
+        value.setAttribute("y", String(BASE_Y - fullHeight - 18));
+        value.setAttribute("text-anchor", "middle");
+        value.textContent = "$" + bar.value.toFixed(2);
+        svg.appendChild(value);
+
+        const label = document.createElementNS(SVG_NS, "text");
+        label.setAttribute("class", "bar-label");
+        label.setAttribute("x", String(x + BAR_W / 2));
+        label.setAttribute("y", String(BASE_Y + 42));
+        label.setAttribute("text-anchor", "middle");
+        label.textContent = bar.label;
+        svg.appendChild(label);
+      });
+
+      // One span per spoken word, so each can light up exactly when it is said.
+      const captionEl = document.getElementById("caption");
+      WORDS.forEach((entry, i) => {
+        const span = document.createElement("span");
+        span.id = "word-" + i;
+        span.textContent = entry.word;
+        captionEl.appendChild(span);
+      });
+
+      const tl = gsap.timeline({ paused: true });
+
+      tl.fromTo("#grid-fill", { opacity: 0 }, { opacity: 0.55, duration: 1.2, ease: "power2.out" }, 0);
+      tl.fromTo("#eyebrow", { opacity: 0, x: -40 }, { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" }, 0.2);
+      tl.fromTo(
+        "#headline",
+        { opacity: 0, y: 46, filter: "blur(10px)" },
+        { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.7, ease: "power4.out" },
+        0.45,
+      );
+      tl.fromTo("#axis", { attr: { x2: 0 } }, { attr: { x2: 1160 }, duration: 0.6, ease: "power2.inOut" }, 1.25);
+
+      BARS.forEach((bar, i) => {
+        const full = Number(document.getElementById("bar-" + i).dataset.fullHeight);
+        const at = 1.7 + i * 0.22;
+        tl.fromTo(
+          "#bar-" + i,
+          { attr: { height: 0, y: BASE_Y } },
+          { attr: { height: full, y: BASE_Y - full }, duration: 0.72, ease: "power3.out" },
+          at,
+        );
+        tl.fromTo("#value-" + i, { opacity: 0 }, { opacity: 1, duration: 0.28 }, at + 0.5);
+      });
+
+      const counter = { v: 0 };
+      const totalEl = document.getElementById("total");
+      tl.fromTo(
+        counter,
+        { v: 0 },
+        {
+          v: TOTAL,
+          duration: 1.5,
+          ease: "power2.out",
+          onUpdate: () => {
+            totalEl.textContent = "$" + counter.v.toFixed(2);
+          },
+        },
+        1.8,
+      );
+
+      // Each word brightens on its own real start time from ElevenLabs.
+      WORDS.forEach((entry, i) => {
+        tl.fromTo(
+          "#word-" + i,
+          { opacity: 0.22, y: 8 },
+          { opacity: 1, y: 0, duration: 0.12, ease: "power2.out" },
+          Math.max(0, entry.start),
+        );
+      });
+
+      tl.fromTo("#stage", { scale: 1 }, { scale: 1.03, duration: DURATION, ease: "none" }, 0);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
