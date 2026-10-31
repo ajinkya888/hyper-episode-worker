@@ -8,10 +8,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ffmpeg \
       ca-certificates \
       fonts-liberation fonts-dejavu-core fonts-noto-color-emoji \
-      libasound2 libatk-bridge2.0-0 libatk1.0-0 libcairo2 libcups2 \
-      libdbus-1-3 libdrm2 libexpat1 libgbm1 libglib2.0-0 libgtk-3-0 \
-      libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 \
-      libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2 \
+      libasound2 libatk-bridge2.0-0 libatk1.0-0 libatspi2.0-0 libcairo2 \
+      libcups2 libdbus-1-3 libdrm2 libexpat1 libgbm1 libglib2.0-0 \
+      libgtk-3-0 libnspr4 libnss3 libpango-1.0-0 libpangocairo-1.0-0 \
+      libwayland-client0 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 \
+      libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxkbcommon0 \
+      libxrandr2 libxrender1 libxshmfence1 libxtst6 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install --no-cache-dir --break-system-packages runpod==1.12.0
@@ -27,9 +29,19 @@ RUN npm install --omit=dev --no-audit --no-fund
 COPY render.mjs handler.py ./
 COPY projects ./projects
 
-# Fail the build rather than the first job if a piece is missing.
+# Fail the build rather than the first job if a piece is missing. The Chrome checks
+# matter most: a missing shared library otherwise shows up only as "0 frames captured".
 RUN node -e "import('@hyperframes/producer').then(m=>{if(!m.executeRenderJob)throw new Error('producer missing executeRenderJob')})" \
     && ffmpeg -version > /dev/null \
-    && test -d /app/.cache/puppeteer
+    && echo "--- puppeteer cache ---" && ls -R /app/.cache/puppeteer | head -40
+
+RUN set -eux; \
+    CHROME="$(find /app/.cache/puppeteer -type f \( -name 'chrome-headless-shell' -o -name 'chrome' \) | head -1)"; \
+    test -n "$CHROME"; \
+    echo "chrome binary: $CHROME"; \
+    echo "--- unresolved shared libraries ---"; \
+    if ldd "$CHROME" | grep "not found"; then echo "MISSING LIBRARIES ABOVE"; exit 1; fi; \
+    "$CHROME" --headless --no-sandbox --disable-gpu --dump-dom about:blank > /dev/null; \
+    echo "chrome launches OK"
 
 CMD ["python3", "-u", "handler.py"]

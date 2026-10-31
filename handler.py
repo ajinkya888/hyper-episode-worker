@@ -89,8 +89,16 @@ def handler(job):
                 result = json.loads(line[len("RESULT:") :])
 
         if result is None:
-            tail = ((proc.stderr or "") + (proc.stdout or ""))[-1500:]
-            return {"ok": False, "error": "render produced no result", "exitCode": proc.returncode, "log": tail}
+            # The cause is usually in the FIRST lines (Chrome failing to launch), while
+            # the tail is only stack frames, so return both ends.
+            log = (proc.stderr or "") + (proc.stdout or "")
+            return {
+                "ok": False,
+                "error": "render produced no result",
+                "exitCode": proc.returncode,
+                "logHead": log[:2500],
+                "logTail": log[-800:],
+            }
 
         if not result.get("ok"):
             return result
