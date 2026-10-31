@@ -15,6 +15,10 @@ const {
   quality = "standard",
   format = "mp4",
   durationSeconds = null,
+  // Left unset, HyperFrames sizes its capture workers from the HOST's CPU count —
+  // 64-256 on a RunPod node — while the container only has 16 vCPU. Pass a number
+  // to cap it to what we actually bought.
+  workers = null,
 } = opts;
 
 mkdirSync(dirname(outputPath), { recursive: true });
@@ -37,7 +41,13 @@ if (typeof shouldBlockRender === "function" && shouldBlockRender(lint)) {
   process.exit(1);
 }
 
-const job = createRenderJob({ fps, quality, format, logger: createConsoleLogger("warn") });
+const job = createRenderJob({
+  fps,
+  quality,
+  format,
+  logger: createConsoleLogger("warn"),
+  ...(workers ? { workers } : {}),
+});
 
 // "Capturing frame 7/300 (5 workers)" is a new stage string every frame, so group
 // by the stage with its numbers stripped — otherwise this reply is 60+ entries.
@@ -81,6 +91,8 @@ console.log(
       fps,
       quality,
       format,
+      workers: workers ?? "auto",
+      hostCpuCount: (await import("node:os")).cpus().length,
       lintMs: Math.round(lintMs),
       lintFindings: findings.length,
       renderMs: Math.round(renderMs),

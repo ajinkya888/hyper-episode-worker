@@ -166,6 +166,7 @@ def handler(job):
             "quality": job_input.get("quality", "standard"),
             "format": fmt,
             "durationSeconds": job_input.get("durationSeconds"),
+            "workers": job_input.get("workers"),
         }
 
         proc = subprocess.run(
