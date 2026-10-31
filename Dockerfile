@@ -49,7 +49,7 @@ RUN { \
     cat /app/install-log.txt; \
     exit 0
 
-COPY render.mjs handler.py ./
+COPY render.mjs voice.mjs handler.py ./
 COPY projects ./projects
 
 # Fail the build rather than the first job if a piece is missing. The Chrome checks
